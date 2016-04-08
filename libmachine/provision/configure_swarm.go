@@ -54,6 +54,8 @@ func configureSwarm(p Provisioner, swarmOptions swarm.Options, authOptions auth.
 		HostURL:    fmt.Sprintf("tcp://%s:%d", ip, enginePort),
 		AuthOption: &authOptions,
 	}
+	hostBind := fmt.Sprintf("%s:%s", dockerDir, dockerDir)
+
 	advertiseInfo := fmt.Sprintf("%s:%d", ip, enginePort)
 
 	if swarmOptions.Master {
@@ -78,7 +80,6 @@ func configureSwarm(p Provisioner, swarmOptions swarm.Options, authOptions auth.
 		//Discovery must be at end of command
 		cmdMaster = append(cmdMaster, swarmOptions.Discovery)
 
-		hostBind := fmt.Sprintf("%s:%s", dockerDir, dockerDir)
 		masterHostConfig := dockerclient.HostConfig{
 			RestartPolicy: dockerclient.RestartPolicy{
 				Name:              "always",
@@ -118,18 +119,24 @@ func configureSwarm(p Provisioner, swarmOptions swarm.Options, authOptions auth.
 			Name:              "always",
 			MaximumRetryCount: 0,
 		},
+		Binds:       []string{hostBind},
 		NetworkMode: "host",
 	}
 
+	cmdWorker := []string{
+		"join",
+		"--advertise",
+		advertiseInfo,
+	}
+	for _, option := range swarmOptions.ArbitraryFlags {
+		cmdWorker = append(cmdWorker, "--"+option)
+	}
+	cmdWorker = append(cmdWorker, swarmOptions.Discovery)
+
 	swarmWorkerConfig := &dockerclient.ContainerConfig{
-		Image: swarmOptions.Image,
-		Env:   swarmOptions.Env,
-		Cmd: []string{
-			"join",
-			"--advertise",
-			advertiseInfo,
-			swarmOptions.Discovery,
-		},
+		Image:      swarmOptions.Image,
+		Env:        swarmOptions.Env,
+		Cmd:        cmdWorker,
 		HostConfig: workerHostConfig,
 	}
 	if swarmOptions.IsExperimental {
